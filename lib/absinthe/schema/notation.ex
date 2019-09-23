@@ -553,6 +553,7 @@ defmodule Absinthe.Schema.Notation do
     |> recordable!(:resolve, @placement[:resolve])
 
     quote do
+      meta :absinthe_telemetry_implicit, true
       middleware Absinthe.Resolution, unquote(func_ast)
     end
   end
@@ -1795,20 +1796,25 @@ defmodule Absinthe.Schema.Notation do
     [Absinthe.Middleware.PassParent]
   end
 
-  def __ensure_middleware__([], %{identifier: identifier}, _) do
-    [{Absinthe.Middleware.MapGet, identifier}]
+  def __ensure_middleware__([], %{identifier: identifier} = field, object) do
+    middleware = [{Absinthe.Middleware.MapGet, identifier}]
+    __ensure_middleware__(middleware, field, object)
   end
 
-  # Don't install Telemetry middleware for Introspection fields
-  @introspection [Absinthe.Phase.Schema.Introspection, Absinthe.Type.BuiltIns.Introspection]
-  def __ensure_middleware__(middleware, %{definition: definition}, _object)
-      when definition in @introspection do
-    middleware
+  def __ensure_middleware__(middleware, field, _object) do
+    if add_telemetry_middleware?(field) do
+      [{Absinthe.Middleware.Telemetry, []} | middleware]
+    else
+      middleware
+    end
   end
 
-  # Install Telemetry middleware
-  def __ensure_middleware__(middleware, _field, _object) do
-    [{Absinthe.Middleware.Telemetry, []} | middleware]
+  defp add_telemetry_middleware?(field) do
+    case Absinthe.Type.meta(field, :absinthe_telemetry) do
+      true -> true
+      false -> false
+      nil -> Absinthe.Type.meta(field, :absinthe_telemetry_implicit)
+    end
   end
 
   defp reverse_with_descs(attrs, descs, acc \\ [])
