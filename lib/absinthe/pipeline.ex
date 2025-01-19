@@ -405,39 +405,39 @@ defmodule Absinthe.Pipeline do
   def run_phase([phase_config | todo] = all_phases, input, done) do
     {phase, options} = phase_invocation(phase_config)
 
-    :telemetry.span([:absinthe, :phase], %{phase: phase}, fn ->
-
-      res = case phase.run(input, options) do
-        {:record_phases, result, fun} ->
-          result = fun.(result, all_phases)
-          run_phase(todo, result, [phase | done])
-
-        {:ok, result} ->
-          run_phase(todo, result, [phase | done])
-
-        {:jump, result, destination_phase} when is_atom(destination_phase) ->
-          run_phase(from(todo, destination_phase), result, [phase | done])
-
-        {:insert, result, extra_pipeline} ->
-          run_phase(List.wrap(extra_pipeline) ++ todo, result, [phase | done])
-
-        {:swap, result, target, replacements} ->
-          todo
-          |> replace(target, replacements)
-          |> run_phase(result, [phase | done])
-
-        {:replace, result, final_pipeline} ->
-          run_phase(List.wrap(final_pipeline), result, [phase | done])
-
-        {:error, message} ->
-          {:error, message, [phase | done]}
-
-        _ ->
-          {:error, "Last phase did not return a valid result tuple.", [phase | done]}
-      end
-
+    res = :telemetry.span([:absinthe, :phase], %{phase: phase}, fn ->
+      res = phase.run(input, options)
       {res, %{}}
     end)
+
+    case res do
+      {:record_phases, result, fun} ->
+        result = fun.(result, all_phases)
+        run_phase(todo, result, [phase | done])
+
+      {:ok, result} ->
+        run_phase(todo, result, [phase | done])
+
+      {:jump, result, destination_phase} when is_atom(destination_phase) ->
+        run_phase(from(todo, destination_phase), result, [phase | done])
+
+      {:insert, result, extra_pipeline} ->
+        run_phase(List.wrap(extra_pipeline) ++ todo, result, [phase | done])
+
+      {:swap, result, target, replacements} ->
+        todo
+        |> replace(target, replacements)
+        |> run_phase(result, [phase | done])
+
+      {:replace, result, final_pipeline} ->
+        run_phase(List.wrap(final_pipeline), result, [phase | done])
+
+      {:error, message} ->
+        {:error, message, [phase | done]}
+
+      _ ->
+        {:error, "Last phase did not return a valid result tuple.", [phase | done]}
+    end
   end
 
   @spec phase_invocation(phase_config_t) :: {Phase.t(), list}
